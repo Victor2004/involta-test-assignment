@@ -5,9 +5,10 @@ import (
 )
 
 type Config struct {
-	ServerAddress string `mapstructure:"SERVER_ADDRESS"`
-	DatabaseName  string `mapstructure:"DATABASE_NAME"`
-	Namespace     string `mapstructure:"NAMESPACE"`
+	ReindexerServerAddress string `mapstructure:"REINDEXER_SERVER_ADDRESS"`
+	DatabaseName           string `mapstructure:"DATABASE_NAME"`
+	Namespace              string `mapstructure:"NAMESPACE"`
+	AppServerAddress       string `mapstructure:"APP_SERVER_ADDRESS"`
 }
 
 func LoadConfig(path string) (config Config, err error) {

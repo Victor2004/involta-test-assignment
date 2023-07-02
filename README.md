@@ -1,7 +1,3 @@
-## Решение тестового задания involta
-
-Программа представляет из себя консольное приложение которое подключается к серверу с Reindexer и позволяет создавать, редактировать, выводить информацию о списке имеющихся документов или заданного документа.
-
 ## Запуск образа doker
 
 Пример
@@ -10,44 +6,30 @@
 docker run -p9088:9088 -p6534:6534 -it reindexer/reindexer
 ```
 
-## Использование приложения
-Показать список команд или справку по одной команде
-```bash
---help, -h
+## Использование API
+Cписок команд
+```
+http://localhost:8080/
 ```
 
 ```
-USAGE:
-   reindex-db-loader [global options] command [command options] [arguments...]
-
 COMMANDS:
-   add, a       Add a document
-   getlist, gl  Get a list of documents
-   get, g       Get the document
-   update, u    Update document
-   delete, d    Delete a document
-   help, h      Shows a list of commands or help for one command
-
-GLOBAL OPTIONS:
-   --help, -h  show help
+		/		Shows a list of commands or help for one command
+		/add/:name/:year		Add a document
+		/get/:id		Get the document
+		/getlist		Get a list of documents
+		/update/:id/:name/:year		Update document
+		/delete/:id		Delete a document
 ```
 
 ### Пример создания документа
 
-```bash
-main add --name "Victor" --year 2004
+```
+http://localhost:8080/add/Victor/2004
 ```
 
-или
-
-```bash
-main a -n Victor -y 2004
 ```
-
-или
-
-```bash
-go run . add -n Victor --year 2004
+{"Added document":{"ID":36,"Name":"Victor","Year":2004}}
 ```
 
 ## Конфигурационный файл
@@ -55,7 +37,8 @@ go run . add -n Victor --year 2004
 app.env находистся в папке configs
 
 ```env
-SERVER_ADDRESS=cproto://localhost:6534
+REINDEXER_SERVER_ADDRESS=cproto://localhost:6534
 DATABASE_NAME=testdb
 NAMESPACE=items
+APP_SERVER_ADDRESS=:8080
 ```

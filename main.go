@@ -1,12 +1,15 @@
+// ЗАПУСТИТЬ DOCKER
+// go build . && main
 package main
 
 import (
 	"fmt"
 	"main/tools"
-	"os"
+	"net/http"
+	"strconv"
 
+	"github.com/gin-gonic/gin"
 	"github.com/restream/reindexer"
-	"github.com/urfave/cli/v2"
 )
 
 type Item struct {
@@ -16,168 +19,146 @@ type Item struct {
 }
 
 func main() {
+	router := gin.Default()
+
 	config, err := tools.LoadConfig(".")
 	if err != nil {
 		panic(err)
 	}
 
-	db := reindexer.NewReindex(config.ServerAddress + "/" + config.DatabaseName)
+	db := reindexer.NewReindex(config.ReindexerServerAddress + "/" + config.DatabaseName)
 
 	db.OpenNamespace(config.Namespace, reindexer.DefaultNamespaceOptions(), Item{})
 
-	app := &cli.App{
-		Name:  "reindex-db-loader",
-		Usage: "Reindex Database loader",
-		Commands: []*cli.Command{
-			{
-				Name:    "add",
-				Aliases: []string{"a"},
-				Usage:   "Add a document",
-				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "name", Aliases: []string{"n"}},
-					&cli.IntFlag{Name: "year", Aliases: []string{"y"}},
-				},
-				Action: func(cCtx *cli.Context) error {
-					// Find the ID of the new document
-					query := db.Query(config.Namespace).ReqTotal()
-					iterator := query.Exec()
-					defer iterator.Close()
+	router.GET("/", func(c *gin.Context) {
+		c.String(http.StatusOK, `COMMANDS:
+		/		Shows a list of commands or help for one command
+		/add/:name/:year		Add a document
+		/get/:id		Get the document
+		/getlist		Get a list of documents
+		/update/:id/:name/:year		Update document
+		/delete/:id		Delete a document`)
+	})
 
-					if err := iterator.Error(); err != nil {
-						panic(err)
-					}
+	router.GET("/add/:name/:year", func(c *gin.Context) {
+		name := c.Param("name")
+		year, _ := strconv.Atoi(c.Param("year"))
 
-					LastID := int64(iterator.TotalCount())
+		// Find the ID of the new document
+		query := db.Query(config.Namespace).ReqTotal()
+		iterator := query.Exec()
+		defer iterator.Close()
 
-					// Add a document
-					err := db.Upsert(config.Namespace, &Item{
-						ID:   LastID,
-						Name: cCtx.String("name"),
-						Year: cCtx.Int("year"),
-					})
-					if err != nil {
-						panic(err)
-					}
+		if err := iterator.Error(); err != nil {
+			panic(err)
+		}
 
-					// Query of the added document
-					elem, found := db.Query(config.Namespace).
-						Where("id", reindexer.EQ, LastID).
-						Get()
+		LastID := int64(iterator.TotalCount())
 
-					if found {
-						item := elem.(*Item)
-						fmt.Println("Added document:", *item)
-					}
+		// Add a document
+		err := db.Upsert(config.Namespace, &Item{
+			ID:   LastID,
+			Name: name,
+			Year: year,
+		})
+		if err != nil {
+			panic(err)
+		}
 
-					return nil
-				},
-			},
-			{
-				Name:    "getlist",
-				Aliases: []string{"gl"},
-				Usage:   "Get a list of documents",
-				Action: func(cCtx *cli.Context) error {
-					query := db.Query(config.Namespace).
-						Sort("id", false).
-						ReqTotal()
+		// Query of the added document
+		elem, found := db.Query(config.Namespace).
+			Where("id", reindexer.EQ, LastID).
+			Get()
 
-					iterator := query.Exec()
-					defer iterator.Close()
+		if found {
+			item := elem.(*Item)
+			c.JSON(http.StatusOK, gin.H{
+				"Added document": *item,
+			})
+		}
 
-					fmt.Println("Found", iterator.TotalCount(), "total documents. Documents:")
+	})
 
-					// Iterate over results
-					for iterator.Next() {
-						elem := iterator.Object().(*Item)
-						fmt.Println(*elem)
-					}
+	router.GET("/get/:id", func(c *gin.Context) {
+		id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 
-					if err := iterator.Error(); err != nil {
-						panic(err)
-					}
+		elem, found := db.Query(config.Namespace).
+			Where("id", reindexer.EQ, id).
+			Get()
 
-					return nil
-				},
-			},
-			{
-				Name:    "get",
-				Aliases: []string{"g"},
-				Usage:   "Get the document",
-				Flags: []cli.Flag{
-					&cli.Int64Flag{Name: "id", Aliases: []string{"i"}},
-				},
-				Action: func(cCtx *cli.Context) error {
-					elem, found := db.Query(config.Namespace).
-						Where("id", reindexer.EQ, cCtx.Int64("id")).
-						Get()
+		if found {
+			item := elem.(*Item)
+			c.JSON(http.StatusOK, gin.H{
+				"Document": *item,
+			})
+		} else {
+			c.String(http.StatusOK, "There is no such document.")
+		}
+	})
 
-					if found {
-						item := elem.(*Item)
-						fmt.Println("Document:", *item)
-					} else {
-						fmt.Println("There is no such document.")
-					}
+	router.GET("/getlist", func(c *gin.Context) {
+		query := db.Query(config.Namespace).
+			Sort("id", false).
+			ReqTotal()
 
-					return nil
-				},
-			},
-			{
-				Name:    "update",
-				Aliases: []string{"u"},
-				Usage:   "Update document",
-				Flags: []cli.Flag{
-					&cli.Int64Flag{Name: "id", Aliases: []string{"i"}},
-					&cli.StringFlag{Name: "name", Aliases: []string{"n"}},
-					&cli.IntFlag{Name: "year", Aliases: []string{"y"}},
-				},
-				Action: func(cCtx *cli.Context) error {
-					// Update document
-					err := db.Upsert(config.Namespace, &Item{
-						ID:   cCtx.Int64("id"),
-						Name: cCtx.String("name"),
-						Year: cCtx.Int("year"),
-					})
-					if err != nil {
-						panic(err)
-					}
+		iterator := query.Exec()
+		defer iterator.Close()
+		message := fmt.Sprintf("Found %v total documents. Documents:\n", iterator.TotalCount())
+		c.String(http.StatusOK, message)
 
-					// Request an updated document
-					elem, found := db.Query(config.Namespace).
-						Where("id", reindexer.EQ, cCtx.Int64("id")).
-						Get()
+		// Iterate over results
+		for iterator.Next() {
+			elem := iterator.Object().(*Item)
+			c.String(http.StatusOK, fmt.Sprintln(*elem))
+		}
 
-					if found {
-						item := elem.(*Item)
-						fmt.Println("Updated document:", *item)
-					}
+		if err := iterator.Error(); err != nil {
+			panic(err)
+		}
+	})
 
-					return nil
-				},
-			},
-			{
-				Name:    "delete",
-				Aliases: []string{"d"},
-				Usage:   "Delete a document",
-				Flags: []cli.Flag{
-					&cli.Int64Flag{Name: "id", Aliases: []string{"i"}},
-				},
-				Action: func(cCtx *cli.Context) error {
-					err := db.Delete(config.Namespace, &Item{
-						ID: cCtx.Int64("id"),
-					})
-					if err != nil {
-						panic(err)
-					}
+	router.GET("/update/:id/:name/:year", func(c *gin.Context) {
+		id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+		name := c.Param("name")
+		year, _ := strconv.Atoi(c.Param("year"))
 
-					fmt.Println("delete task:", cCtx.String("id"))
+		// Update document
+		err := db.Upsert(config.Namespace, &Item{
+			ID:   id,
+			Name: name,
+			Year: year,
+		})
+		if err != nil {
+			panic(err)
+		}
 
-					return nil
-				},
-			},
-		},
-	}
+		// Request an updated document
+		elem, found := db.Query(config.Namespace).
+			Where("id", reindexer.EQ, id).
+			Get()
 
-	if err := app.Run(os.Args); err != nil {
-		panic(err)
-	}
+		if found {
+			item := elem.(*Item)
+			c.JSON(http.StatusOK, gin.H{
+				"Updated document": *item,
+			})
+		}
+	})
+
+	router.GET("/delete/:id", func(c *gin.Context) {
+		id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+
+		err := db.Delete(config.Namespace, &Item{
+			ID: id,
+		})
+		if err != nil {
+			panic(err)
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"delete task": id,
+		})
+	})
+
+	router.Run(config.AppServerAddress)
 }
