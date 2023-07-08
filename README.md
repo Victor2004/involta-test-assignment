@@ -7,13 +7,13 @@ docker run -p9088:9088 -p6534:6534 -it reindexer/reindexer
 ```
 
 ## Использование API
-Cписок команд
+Список HTTP-запросов
 ```
 http://localhost:8080/
 ```
 
 ```
-COMMANDS:
+List of HTTP requests:
 		/		Shows a list of commands or help for one command
 		/add/:name/:year		Add a document
 		/get/:id		Get the document
