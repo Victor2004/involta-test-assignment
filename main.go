@@ -1,5 +1,3 @@
-// ЗАПУСТИТЬ DOCKER
-// go build . && main
 package main
 
 import (
@@ -12,6 +10,7 @@ import (
 	"github.com/restream/reindexer"
 )
 
+// Структура базы данных
 type Item struct {
 	ID   int64  `reindex:"id,,pk"`
 	Name string `reindex:"name"`
@@ -19,6 +18,7 @@ type Item struct {
 }
 
 func main() {
+	// Инициализируем роутер Gin, используя Default.
 	router := gin.Default()
 
 	config, err := tools.LoadConfig(".")
@@ -26,10 +26,13 @@ func main() {
 		panic(err)
 	}
 
+	// Создаем подключение к серверу Reindexer
 	db := reindexer.NewReindex(config.ReindexerServerAddress + "/" + config.DatabaseName)
 
+	// Открываем нужное пространство имен
 	db.OpenNamespace(config.Namespace, reindexer.DefaultNamespaceOptions(), Item{})
 
+	// Используем функцию GET, чтобы связать метод GET HTTP и путь / с функцией обработчика.
 	router.GET("/", func(c *gin.Context) {
 		c.String(http.StatusOK, `COMMANDS:
 		/		Shows a list of commands or help for one command
@@ -40,6 +43,7 @@ func main() {
 		/delete		Delete a document`)
 	})
 
+	// Используем функцию GET, чтобы связать метод GET HTTP и путь /getlist с функцией обработчика.
 	router.GET("/getlist", func(c *gin.Context) {
 		query := db.Query(config.Namespace).
 			Sort("id", false).
@@ -50,7 +54,7 @@ func main() {
 		message := fmt.Sprintf("Found %v total documents. Documents:\n", iterator.TotalCount())
 		c.String(http.StatusOK, message)
 
-		// Iterate over results
+		// Итерация результатов
 		for iterator.Next() {
 			elem := iterator.Object().(*Item)
 			c.String(http.StatusOK, fmt.Sprintln(*elem))
@@ -61,6 +65,7 @@ func main() {
 		}
 	})
 
+	// Используем функцию GET, чтобы связать метод GET HTTP и путь /get/X (вместо X нужно указать нужный id) с функцией обработчика.
 	router.GET("/get/:id", func(c *gin.Context) {
 		id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 
@@ -78,7 +83,7 @@ func main() {
 		}
 	})
 
-	// curl -X POST -H "Content-Type: application/json" -d "{\"name\":\"John\", \"year\": 1998}" localhost:8080/add
+	// Связываем метод POST по пути /add с функцией обработчика.
 	router.POST("/add", func(c *gin.Context) {
 		var request Item
 
@@ -86,11 +91,7 @@ func main() {
 			return
 		}
 
-		// c.JSON(http.StatusCreated, gin.H{name.Name: name.Year})
-		// name := c.Param("name")
-		// year, _ := strconv.Atoi(c.Param("year"))
-
-		// Find the ID of the new document
+		// Находим идентификатор нового документа
 		query := db.Query(config.Namespace).ReqTotal()
 		iterator := query.Exec()
 		defer iterator.Close()
@@ -101,17 +102,18 @@ func main() {
 
 		LastID := int64(iterator.TotalCount())
 
-		// Add a document
+		// Добавляем документ в базу данных
 		err := db.Upsert(config.Namespace, &Item{
 			ID:   LastID,
 			Name: request.Name,
 			Year: request.Year,
 		})
+
 		if err != nil {
 			panic(err)
 		}
 
-		// Query of the added document
+		// Запрос добавленного документа
 		elem, found := db.Query(config.Namespace).
 			Where("id", reindexer.EQ, LastID).
 			Get()
@@ -124,7 +126,7 @@ func main() {
 		}
 	})
 
-	// curl -X PUT -H "Content-Type: application/json" -d "{\"id\": 20, \"name\":\"John\", \"year\": 1998}" localhost:8080/update
+	// Связываем метод PUT по пути /update с функцией обработчика.
 	router.PUT("/update", func(c *gin.Context) {
 		var request Item
 
@@ -132,7 +134,7 @@ func main() {
 			return
 		}
 
-		// Update document
+		// Обновляем документ
 		err := db.Upsert(config.Namespace, &Item{
 			ID:   request.ID,
 			Name: request.Name,
@@ -142,7 +144,7 @@ func main() {
 			panic(err)
 		}
 
-		// Request an updated document
+		// Запрос обновленного документа
 		elem, found := db.Query(config.Namespace).
 			Where("id", reindexer.EQ, request.ID).
 			Get()
@@ -155,7 +157,7 @@ func main() {
 		}
 	})
 
-	// curl -X DELETE -H "Content-Type: application/json" -d "{\"id\": 43}" localhost:8080/delete
+	// Связываем метод DELETE по пути /delete с функцией обработчика.
 	router.DELETE("/delete", func(c *gin.Context) {
 		var request Item
 
@@ -163,6 +165,7 @@ func main() {
 			return
 		}
 
+		// Удаляем документ
 		err := db.Delete(config.Namespace, &Item{
 			ID: request.ID,
 		})
@@ -175,5 +178,6 @@ func main() {
 		})
 	})
 
-	router.Run(config.AppServerAddress)
+	// Запускаем веб сервис
+	router.Run(config.AppServerPort)
 }
